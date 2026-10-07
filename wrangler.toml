@@ -1,0 +1,11 @@
+name = "flarefolio"
+compatibility_date = "2025-06-01"
+
+# R2 绑定：存放原图的 bucket（Functions 里通过 env.IMAGES 访问）
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "gallery-images"
+
+# 上传鉴权 token 请用 secret 设置，不要写在这里：
+#   npx wrangler pages secret put UPLOAD_TOKEN
+# 也可以在 Pages Dashboard → Settings → Functions → Environment variables 里设置

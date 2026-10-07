@@ -1,0 +1,62 @@
+/**
+ * POST /api/upload — 鉴权后把图片写入 R2。
+ * 鉴权：请求头 Authorization: Bearer <UPLOAD_TOKEN>
+ *   UPLOAD_TOKEN 通过 `npx wrangler pages secret put UPLOAD_TOKEN` 设置。
+ * 注意：超大文件建议改用 R2 presigned URL 直传（见 README）。
+ */
+const MAX_BYTES = 10 * 1024 * 1024; // 单文件 10MB，可按需调整
+
+function safeName(name) {
+  return name
+    .replace(/[/\\]/g, '_')
+    .replace(/[^\w.\-()[\]{} ]+/g, '')
+    .trim()
+    .slice(0, 120) || 'image';
+}
+
+export async function onRequestPost({ request, env }) {
+  if (!env.IMAGES) {
+    return Response.json({ error: 'R2 binding "IMAGES" 未配置' }, { status: 500 });
+  }
+  if (!env.UPLOAD_TOKEN) {
+    return Response.json({ error: 'UPLOAD_TOKEN 未设置' }, { status: 500 });
+  }
+  const auth = request.headers.get('Authorization') || '';
+  if (auth !== `Bearer ${env.UPLOAD_TOKEN}`) {
+    return Response.json({ error: '未授权' }, { status: 401 });
+  }
+
+  let form;
+  try {
+    form = await request.formData();
+  } catch {
+    return Response.json({ error: '需要 multipart/form-data' }, { status: 400 });
+  }
+  const file = form.get('file');
+  if (!file || typeof file === 'string') {
+    return Response.json({ error: '缺少 file 字段' }, { status: 400 });
+  }
+  if (!file.type.startsWith('image/')) {
+    return Response.json({ error: `不支持的文件类型：${file.type}` }, { status: 400 });
+  }
+  if (file.size > MAX_BYTES) {
+    return Response.json(
+      { error: `文件过大（${(file.size / 1048576).toFixed(1)}MB），上限 10MB` },
+      { status: 413 }
+    );
+  }
+
+  const d = new Date();
+  const ymd = `${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${String(d.getUTCDate()).padStart(2, '0')}`;
+  const key = `${ymd}/${Date.now()}-${safeName(file.name)}`;
+
+  await env.IMAGES.put(key, file.stream(), {
+    httpMetadata: {
+      contentType: file.type,
+      // 文件名带时间戳，内容不可变，可放心长缓存
+      cacheControl: 'public, max-age=31536000, immutable'
+    }
+  });
+
+  return Response.json({ ok: true, key, size: file.size }, { status: 201 });
+}
