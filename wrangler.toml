@@ -18,4 +18,4 @@ bucket_name = "img01"
 [[d1_databases]]
 binding = "DB"
 database_name = "gallery-db"
-database_id = "TODO_DATABASE_ID"
+database_id = "6391a8bc-1f51-47d2-824b-ef0fed2b276c"
