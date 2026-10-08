@@ -13,6 +13,14 @@ function safeName(name) {
     .slice(0, 120) || 'image';
 }
 
+/** 保证 key 带图片扩展名（相机直拍的文件名常是 "blob" 等无扩展名，
+ *  Cloudflare 变换服务对无扩展名源会 404） */
+function ensureExt(name, contentType) {
+  if (/\.(jpe?g|png|webp|gif|avif)$/i.test(name)) return name;
+  const ext = ({ 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'image/gif': '.gif', 'image/avif': '.avif' })[contentType] || '.jpg';
+  return name + ext;
+}
+
 export async function onRequestPost({ request, env }) {
   if (!env.IMAGES) {
     return Response.json({ error: 'R2 binding "IMAGES" 未配置' }, { status: 500 });
@@ -40,7 +48,7 @@ export async function onRequestPost({ request, env }) {
 
   const d = new Date();
   const ymd = `${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, '0')}/${String(d.getUTCDate()).padStart(2, '0')}`;
-  const key = `${ymd}/${Date.now()}-${safeName(file.name)}`;
+  const key = `${ymd}/${Date.now()}-${ensureExt(safeName(file.name), file.type)}`;
 
   await env.IMAGES.put(key, file.stream(), {
     httpMetadata: {

@@ -122,8 +122,9 @@ export async function stripPrivateMetadata(file) {
     return { file: await bakeAndStrip(new Blob([buf], { type: 'image/jpeg' }), orientation), mode: 'baked' };
   }
   const cleaned = losslessStrip(buf);
-  // 处理后可能比原文件还大（罕见）或没变化——都无所谓，取小的意义不大，直接用
-  const out = new File([cleaned], file.name.replace(/\.heic$/i, '.jpg') || 'photo.jpg', {
+  // 输出必为 JPEG：文件名去原扩展名后统一补 .jpg（相机直拍的 "blob" 等无扩展名文件由此兜底）
+  const baseName = file.name.replace(/\.[^.]+$/, '') || 'photo';
+  const out = new File([cleaned], `${baseName}.jpg`, {
     type: 'image/jpeg',
     lastModified: Date.now()
   });

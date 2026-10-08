@@ -34,8 +34,19 @@ export async function onRequestPost({ request, params, env }) {
     return Response.json({ error: `变换服务返回 ${res.status}（可能超出每月 5000 次额度）` }, { status: 502 });
   }
 
-  // 新 key：扩展名前加 -r<时间戳>，避免命中旧长缓存
-  const newKey = row.image_key.replace(/(\.[^.]+)$/, `-r${Date.now()}$1`);
+  // 新 key：扩展名前加 -r<时间戳>，避免命中旧长缓存。
+  // 无扩展名的 key（如相机直拍的 "blob"）用后缀追加，保证 newKey !== oldKey，
+  // 否则"写新→删旧"会删掉刚写入的对象（数据丢失）。
+  const key = row.image_key;
+  const dot = key.lastIndexOf('.');
+  const slash = key.lastIndexOf('/');
+  const hasExt = dot > slash + 1;
+  const newKey = hasExt
+    ? `${key.slice(0, dot)}-r${Date.now()}${key.slice(dot)}`
+    : `${key}-r${Date.now()}`;
+  if (newKey === key) {
+    return Response.json({ error: '新 key 生成失败（与旧 key 相同）' }, { status: 500 });
+  }
   const buf = await res.arrayBuffer();
   await env.IMAGES.put(newKey, buf, {
     httpMetadata: {
