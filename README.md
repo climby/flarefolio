@@ -1,105 +1,86 @@
-# Flarefolio — Cloudflare Pages + R2 Image Gallery (Vue 3)
+# Flarefolio — Cloudflare Pages + R2 Art Gallery (Vue 3)
 
 English | [简体中文](README.zh-CN.md)
 
-A Vue 3 (Vite + Composition API) image gallery: **R2 stores originals, Pages hosts the frontend, Image Transformations serve resized images on demand**.
+A Vue 3 (Vite + Composition API) art gallery: **R2 stores originals, D1 holds metadata, Pages hosts the frontend, Image Transformations serve resized images on demand, Zero Trust Access guards the admin**.
 
 **Live site**: <https://pic.5201688.xyz>
 
 ## Features
 
-- Responsive image grid (`srcset` multi-width + lazy loading + skeleton screens)
+- Artwork metadata: title, medium, notes, tags (D1), with aspect-ratio placeholders
+- Responsive image grid (`srcset` multi-width + lazy loading) with hover metadata overlay
+- Search by title / medium / tag
 - Lightbox viewer (keyboard ←/→/Esc)
-- Search by filename (with count)
-- `#/admin` upload page (token auth, token kept in browser localStorage, drag & drop upload)
-- Minimal hash routing (`#/` gallery, `#/admin` upload — no vue-router needed)
-- `/api/images` dynamic manifest (R2 binding, 60s cache)
-- `/api/upload` authenticated upload (10MB limit, configurable)
-- `scripts/gen-manifest.mjs` static manifest option (no runtime `list`, saves Class A operations)
+- `#/admin` upload page **behind Cloudflare Access** (email one-time-code login — no passwords, no tokens)
+- Two-step publish: file → R2, then metadata → D1
+- Tailwind CSS v4
+- `/api/artworks` public manifest (D1, 60s cache), `/api/images` R2 fallback
 
 ## Actual deployment configuration
 
 | Item | Value |
 |---|---|
 | Site | `https://pic.5201688.xyz` (Pages custom domain) |
-| R2 bucket | `img01` |
-| R2 public domain | `https://s3img01.5201688.xyz` (originals) |
-| R2 binding | `IMAGES` (from `wrangler.toml`, applied automatically by Git builds) |
-| Upload secret | `UPLOAD_TOKEN` (Pages production secret) |
+| R2 bucket | `img01`, public domain `https://s3img01.5201688.xyz` |
+| D1 database | `gallery-db` (tables: `artworks`, `tags`, `artwork_tags` — see `schema.sql`) |
+| Admin auth | Cloudflare Access (team `mdengfeng`), protects `/admin` and `/api/admin` |
 | Transformations | Enabled for zone `5201688.xyz` (free tier: 5,000 unique/month) |
 
 ## Quick start
 
-### 1. Create an R2 bucket
+### 1. Cloudflare resources
 
 ```bash
-npx wrangler r2 bucket create <your-bucket>
+npx wrangler r2 bucket create <your-bucket>        # + Public access custom domain
+npx wrangler d1 create gallery-db                   # note the database_id
+npx wrangler d1 execute gallery-db --remote --file=./schema.sql
 ```
 
-In Dashboard → R2 → bucket → Settings, enable **Public access** and connect a custom domain (e.g. `img.example.com`).
+### 2. Configure
 
-### 2. Install dependencies
+- `wrangler.toml`: `bucket_name`, `pages_build_output_dir = "dist"`, `database_id`, `CF_ACCESS_TEAM` / `CF_ACCESS_AUD`
+- `src/config.js`: `IMG_BASE` = your R2 custom domain
+
+### 3. Zero Trust Access (admin auth, replaces tokens)
+
+1. <https://one.dash.cloudflare.com> → **Access → Applications → Add → Self-hosted**
+2. Public hostnames (two entries, **paths must be set — empty path protects the whole domain**):
+   | Domain | Path |
+   |---|---|
+   | `yourdomain.com` | `/admin` |
+   | `yourdomain.com` | `/api/admin` |
+3. Policy: Allow → Include → Emails → your email
+4. Copy the **Application ID (AUD)** into `wrangler.toml`
+
+> Access must be on the **custom domain** — `*.pages.dev` hostnames cause a login loop.
+
+### 4. Deploy
+
+Push to GitHub → Pages builds automatically (`npm run build` → `dist`; R2/D1 bindings and vars come from `wrangler.toml`).
 
 ```bash
-cd flarefolio
-npm install
+npm run dev          # frontend only
+npm run pages:dev    # full stack (local)
 ```
 
-### 3. Configure
+## How auth works
 
-- `wrangler.toml`: set `bucket_name` and keep `pages_build_output_dir = "dist"` (required — see Troubleshooting)
-- `src/config.js`: set `IMG_BASE` to your R2 custom domain
-- Set the upload token:
-  ```bash
-  npx wrangler pages secret put UPLOAD_TOKEN --project-name flarefolio
-  ```
-
-### 4. Image manifest (choose one)
-
-**Option A (recommended, dynamic)**: do nothing — the frontend requests `/api/images` first.
-
-**Option B (static, cheaper)**: generate `public/images.json` at build time (Vite copies it to `dist/` as-is):
-
-```bash
-R2_ACCOUNT_ID=xxx R2_ACCESS_KEY_ID=xxx R2_SECRET_ACCESS_KEY=xxx \
-R2_BUCKET=<your-bucket> npm run manifest
-```
-
-### 5. Build & deploy
-
-**Git integration (recommended)**: push to GitHub, connect the repo in Dashboard → Workers & Pages → Create → **Pages** → Connect to Git. Build command `npm run build`, build output directory `dist`. With `pages_build_output_dir` declared in `wrangler.toml`, the R2 binding is applied automatically on every build.
-
-After that, every `git push` deploys automatically.
-
-**Direct upload** (no Git integration):
-
-```bash
-npm run deploy   # vite build + wrangler pages deploy dist
-```
-
-Local development:
-
-```bash
-npm run dev         # frontend only, Vite dev server
-npm run pages:dev   # full stack (with Functions), requires wrangler login
-```
-
-## Notes
-
-- `/cdn-cgi/image/` requires the site to be served from a **custom domain**; it may not work on `*.pages.dev` preview domains. Set `USE_TRANSFORMATIONS = false` in `src/config.js` in that case.
-- Enable Image Transformations once per zone: Dashboard → **Images → Transformations** → Enable for your zone. Free tier: 5,000 unique transformations/month; exceeding quota returns error 9422 (the frontend falls back to originals).
-- Pages secrets only take effect on deployments created **after** the secret was set. After changing `UPLOAD_TOKEN`, trigger a new deployment and clear the old token from the browser (`localStorage.removeItem('gallery_upload_token')`).
+- `/admin` and `/api/admin/*` sit behind a Cloudflare Access application (email OTP, session persists per device)
+- `functions/api/admin/_middleware.js` verifies the `Cf-Access-Jwt-Assertion` JWT (JWKS + RS256 signature + iss/aud/exp) on every admin request
+- A legacy Bearer `UPLOAD_TOKEN` channel remains in the middleware as an emergency fallback
 
 ## Troubleshooting
 
 | Symptom | Cause / Fix |
 |---|---|
-| Build error `Missing entry-point to Worker script` | `wrangler.toml` lacks `pages_build_output_dir` — declare it, and make sure the project is a **Pages** project, not a Worker |
+| Build error `Missing entry-point` | `wrangler.toml` lacks `pages_build_output_dir`, or the project was created as a Worker instead of Pages |
+| Deployment fails right after adding `[vars]` | `[vars]` overrides dashboard-set secrets — add `keep_vars = true` or remove the dashboard secret |
+| Pushes stop triggering builds | GitHub App lost repository access — GitHub → Settings → Applications → Cloudflare Pages → re-grant the repo |
+| `/admin` shows no Access login | Access app path is empty (= whole domain) or set on `*.pages.dev`; use the custom domain with explicit `/admin` path |
+| Whole site redirects to login | An Access hostname entry has an **empty path** — delete it, keep only `/admin` and `/api/admin` |
+| Upload page shows old UI | Browser cached the old bundle — hard refresh (Ctrl+Shift+R) |
 | `R2 bucket '...' not found` at publish | `bucket_name` in `wrangler.toml` doesn't match an existing bucket |
-| `No build command specified. Skipping build step.` | Set build command `npm run build` in Pages → Settings → Build |
-| Upload returns `UPLOAD_TOKEN 未设置` despite being set | Secret was set after the current deployment, or set on Preview instead of Production — re-set for Production and redeploy |
-| Upload returns `未授权` in the admin page but curl works | Browser localStorage holds a stale token — clear and re-enter it on `#/admin` |
-| Thumbnails 404 | Transformations not enabled for the zone, or site accessed via `*.pages.dev` — use the custom domain and enable the zone in Images → Transformations |
 
 ## Directory structure
 
@@ -107,20 +88,22 @@ npm run pages:dev   # full stack (with Functions), requires wrangler login
 flarefolio/
 ├── README.md                # English (default)
 ├── README.zh-CN.md          # 简体中文
-├── wrangler.toml            # R2 binding + pages_build_output_dir
-├── vite.config.js
-├── index.html
+├── schema.sql               # D1 tables
+├── wrangler.toml            # bindings + vars + pages_build_output_dir
 ├── src/
-│   ├── main.js
 │   ├── config.js            # IMG_BASE etc.
-│   ├── App.vue              # Top bar + hash routing
-│   ├── lib/gallery.js       # Image URLs / manifest loading
-│   ├── assets/styles.css
+│   ├── lib/gallery.js       # data loading, image URLs
 │   └── components/
-│       ├── GalleryView.vue  # Grid + search + lightbox
+│       ├── GalleryView.vue  # grid + search + lightbox
 │       ├── Lightbox.vue
-│       └── AdminView.vue    # Upload page
-├── public/images.json       # Static manifest (Option B)
-├── functions/api/           # images.js / upload.js
+│       └── AdminView.vue    # metadata form + two-step publish
+├── functions/api/
+│   ├── artworks.js          # GET public list (D1)
+│   ├── images.js           # GET R2 fallback
+│   └── admin/
+│       ├── _middleware.js  # Access JWT verification
+│       ├── _access.js       # JWT/JWKS helpers (not a route)
+│       ├── upload.js        # POST file → R2
+│       └── artworks/         # POST create · PATCH/DELETE by id
 └── scripts/gen-manifest.mjs
 ```
