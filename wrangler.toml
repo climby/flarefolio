@@ -5,18 +5,14 @@ compatibility_date = "2025-06-01"
 # 并读取下方 bindings（R2 等），无需在 Dashboard 手动绑定
 pages_build_output_dir = "dist"
 
-# 保留 Dashboard 里设置的变量/secret（UPLOAD_TOKEN），与下方 [vars] 共存，
-# 否则 [vars] 会整体覆盖 Dashboard 配置导致部署失败
-keep_vars = true
-
 # R2 绑定：存放原图的 bucket（Functions 里通过 env.IMAGES 访问）
 [[r2_buckets]]
 binding = "IMAGES"
 bucket_name = "img01"
 
-# 上传鉴权 token 请用 secret 设置，不要写在这里：
-#   npx wrangler pages secret put UPLOAD_TOKEN
-# 也可以在 Pages Dashboard → Settings → Functions → Environment variables 里设置
+# 后台鉴权已改为 Cloudflare Access（见 [vars] 的 CF_ACCESS_* 与 README）。
+# 注意：Pages Git 构建不支持 keep_vars；[vars] 会覆盖 Dashboard 变量，
+# 因此 Dashboard 中的 UPLOAD_TOKEN secret 需删除（Bearer 通道仅作过渡）。
 
 # D1：画作元数据（标题/材质/心得/标签），Functions 里通过 env.DB 访问
 [[d1_databases]]
