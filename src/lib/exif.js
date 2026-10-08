@@ -129,3 +129,36 @@ export async function stripPrivateMetadata(file) {
   });
   return { file: out, mode: 'lossless' };
 }
+
+/**
+ * 手动旋转 90°（用于源头就没有 orientation 信息的照片，如某些第三方相机 App）。
+ * quarterTurns：顺时针 90° 的次数（1 或 3=逆时针 90°）。
+ * 返回旋转后的 JPEG File。
+ */
+export async function rotateQuarter(file, quarterTurns = 1) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = url;
+    });
+    const n = ((quarterTurns % 4) + 4) % 4;
+    if (n === 0) return file;
+    const swap = n % 2 === 1;
+    const w = swap ? img.naturalHeight : img.naturalWidth;
+    const h = swap ? img.naturalWidth : img.naturalHeight;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate(n * 0.5 * Math.PI);
+    ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.92));
+    return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}

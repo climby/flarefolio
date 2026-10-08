@@ -1,9 +1,10 @@
 <script setup>
 import { ref } from 'vue';
-import { stripPrivateMetadata } from '../lib/exif.js';
+import { stripPrivateMetadata, rotateQuarter } from '../lib/exif.js';
 
 const file = ref(null);           // 当前待上传文件（单张，逐张填元数据）
 const exifMode = ref('');         // lossless / baked / passthrough
+const previewUrl = ref('');       // 选图预览（旋转时能看到方向）
 const title = ref('');
 const medium = ref('');
 const notes = ref('');
@@ -25,6 +26,32 @@ function push(html, cls) {
   log.value.unshift({ html, cls });
 }
 
+/** 更新预览与宽高比 */
+function refreshMeta() {
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
+  previewUrl.value = file.value ? URL.createObjectURL(file.value) : '';
+  aspectRatio.value = null;
+  if (!file.value) return;
+  const img = new Image();
+  img.onload = () => {
+    aspectRatio.value = img.naturalWidth / img.naturalHeight || null;
+  };
+  img.src = previewUrl.value;
+}
+
+/** 手动旋转 90°（顺时针 quarterTurns 次；1 正转、3 逆转） */
+async function rotate(dir) {
+  if (!file.value || uploading.value) return;
+  uploading.value = true;
+  try {
+    file.value = await rotateQuarter(file.value, dir);
+    refreshMeta();
+  } catch (e) {
+    push(`✕ 旋转失败：${e.message}`, 'err');
+  }
+  uploading.value = false;
+}
+
 async function setFile(f) {
   if (!f) return;
   // 先剥离隐私数据（GPS/相机信息），文件不出设备
@@ -38,19 +65,12 @@ async function setFile(f) {
   file.value = cleaned.file;
   exifMode.value = cleaned.mode;
   title.value = cleaned.file.name.replace(/\.[^.]+$/, '').slice(0, 200) || '未命名画作';
-  aspectRatio.value = null;
-  // 本地读宽高（不经过网络），瀑布流占位用
-  const url = URL.createObjectURL(cleaned.file);
-  const img = new Image();
-  img.onload = () => {
-    aspectRatio.value = img.naturalWidth / img.naturalHeight || null;
-    URL.revokeObjectURL(url);
-  };
-  img.onerror = () => URL.revokeObjectURL(url);
-  img.src = url;
+  refreshMeta();
 }
 
 function resetForm() {
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
+  previewUrl.value = '';
   file.value = null;
   exifMode.value = '';
   title.value = '';
@@ -128,6 +148,31 @@ async function upload() {
       <p class="mt-0.5 text-xs text-green-600">
         {{ EXIF_LABELS[exifMode] || '' }}
       </p>
+
+      <!-- 预览 + 手动旋转（源头无 orientation 信息的照片在此纠正） -->
+      <div class="mt-3 flex items-start gap-3">
+        <img
+          :src="previewUrl"
+          alt="预览"
+          class="max-h-56 rounded-lg border border-gray-200 bg-gray-50 object-contain"
+        >
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 transition-colors hover:border-blue-500 hover:text-blue-600"
+            :disabled="uploading"
+            title="逆时针旋转 90°"
+            @click="rotate(3)"
+          >⟲</button>
+          <button
+            type="button"
+            class="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 transition-colors hover:border-blue-500 hover:text-blue-600"
+            :disabled="uploading"
+            title="顺时针旋转 90°"
+            @click="rotate(1)"
+          >⟳</button>
+        </div>
+      </div>
       <div class="mt-3 grid gap-3">
         <div>
           <label class="mb-1.5 block text-[13px] text-gray-400">标题</label>
