@@ -25,10 +25,10 @@ export async function onRequestPost({ request, params, env }) {
     return Response.json({ error: '画作不存在' }, { status: 404 });
   }
 
-  // 借站点域名的变换服务旋转像素（与前端出图同一条链路）
-  const origin = new URL(request.url).origin;
-  const src = `${env.R2_IMG_BASE || origin}/${row.image_key}`;
-  const rotatedUrl = `${origin}/cdn-cgi/image/rotate=${quarter === 1 ? 90 : 270},quality=92,format=jpeg/${src}`;
+  // 在 R2 公开域名上做变换（同 zone、Transformations 生效），
+  // 不 fetch 站点自身域名——避免 Worker 子请求自引用被平台拒绝（502）
+  const base = env.R2_IMG_BASE || `https://s3img01.5201688.xyz`;
+  const rotatedUrl = `${base}/cdn-cgi/image/rotate=${quarter === 1 ? 90 : 270},quality=92,format=jpeg/${row.image_key}`;
   const res = await fetch(rotatedUrl);
   if (!res.ok) {
     return Response.json({ error: `变换服务返回 ${res.status}（可能超出每月 5000 次额度）` }, { status: 502 });
