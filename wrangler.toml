@@ -5,6 +5,10 @@ compatibility_date = "2025-06-01"
 # 并读取下方 bindings（R2 等），无需在 Dashboard 手动绑定
 pages_build_output_dir = "dist"
 
+# 保留 Dashboard 里设置的变量/secret（UPLOAD_TOKEN），与下方 [vars] 共存，
+# 否则 [vars] 会整体覆盖 Dashboard 配置导致部署失败
+keep_vars = true
+
 # R2 绑定：存放原图的 bucket（Functions 里通过 env.IMAGES 访问）
 [[r2_buckets]]
 binding = "IMAGES"
