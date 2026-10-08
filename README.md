@@ -1,93 +1,126 @@
-# Flarefolio — Cloudflare Pages + R2 图片画廊（Vue 3）
+# Flarefolio — Cloudflare Pages + R2 Image Gallery (Vue 3)
 
-Vue 3（Vite + 组合式 API）版本的图片画廊：**R2 存原图、Pages 托管前端、Image Transformations 按需出图**。
+English | [简体中文](README.zh-CN.md)
 
-## 功能
+A Vue 3 (Vite + Composition API) image gallery: **R2 stores originals, Pages hosts the frontend, Image Transformations serve resized images on demand**.
 
-- 响应式图片网格（`srcset` 多档位 + 懒加载 + 骨架屏）
-- 灯箱浏览（键盘 ←/→/Esc）
-- 按文件名搜索（含计数）
-- `#/admin` 上传页（token 鉴权，token 存浏览器 localStorage，拖拽上传）
-- 极简 hash 路由（`#/` 画廊、`#/admin` 上传，无需 vue-router）
-- `/api/images` 动态清单（R2 binding，60 秒缓存）
-- `/api/upload` 鉴权上传（10MB 上限，可调）
-- `scripts/gen-manifest.mjs` 静态清单方案（免运行时 list，省 Class A 操作）
+**Live site**: <https://pic.5201688.xyz>
 
-## 快速开始
+## Features
 
-### 1. 创建 R2 bucket
+- Responsive image grid (`srcset` multi-width + lazy loading + skeleton screens)
+- Lightbox viewer (keyboard ←/→/Esc)
+- Search by filename (with count)
+- `#/admin` upload page (token auth, token kept in browser localStorage, drag & drop upload)
+- Minimal hash routing (`#/` gallery, `#/admin` upload — no vue-router needed)
+- `/api/images` dynamic manifest (R2 binding, 60s cache)
+- `/api/upload` authenticated upload (10MB limit, configurable)
+- `scripts/gen-manifest.mjs` static manifest option (no runtime `list`, saves Class A operations)
+
+## Actual deployment configuration
+
+| Item | Value |
+|---|---|
+| Site | `https://pic.5201688.xyz` (Pages custom domain) |
+| R2 bucket | `img01` |
+| R2 public domain | `https://s3img01.5201688.xyz` (originals) |
+| R2 binding | `IMAGES` (from `wrangler.toml`, applied automatically by Git builds) |
+| Upload secret | `UPLOAD_TOKEN` (Pages production secret) |
+| Transformations | Enabled for zone `5201688.xyz` (free tier: 5,000 unique/month) |
+
+## Quick start
+
+### 1. Create an R2 bucket
 
 ```bash
-npx wrangler r2 bucket create gallery-images
+npx wrangler r2 bucket create <your-bucket>
 ```
 
-在 Dashboard → R2 → bucket → Settings 里打开 **Public access**，绑定自定义域名（如 `img.example.com`）。
+In Dashboard → R2 → bucket → Settings, enable **Public access** and connect a custom domain (e.g. `img.example.com`).
 
-### 2. 安装依赖
+### 2. Install dependencies
 
 ```bash
 cd flarefolio
 npm install
 ```
 
-### 3. 配置
+### 3. Configure
 
-- `wrangler.toml`：`bucket_name` 改成你的 bucket 名
-- `src/config.js`：`IMG_BASE` 改成你的 R2 自定义域名
-- 设置上传 token：
+- `wrangler.toml`: set `bucket_name` and keep `pages_build_output_dir = "dist"` (required — see Troubleshooting)
+- `src/config.js`: set `IMG_BASE` to your R2 custom domain
+- Set the upload token:
   ```bash
-  npx wrangler pages secret put UPLOAD_TOKEN
+  npx wrangler pages secret put UPLOAD_TOKEN --project-name flarefolio
   ```
 
-### 4. 图片清单（二选一）
+### 4. Image manifest (choose one)
 
-**方案 A（推荐，动态）**：什么都不用做，前端优先请求 `/api/images`。
+**Option A (recommended, dynamic)**: do nothing — the frontend requests `/api/images` first.
 
-**方案 B（静态，更省）**：构建时生成 `public/images.json`（Vite 会原样拷贝到 `dist/`）：
+**Option B (static, cheaper)**: generate `public/images.json` at build time (Vite copies it to `dist/` as-is):
 
 ```bash
 R2_ACCOUNT_ID=xxx R2_ACCESS_KEY_ID=xxx R2_SECRET_ACCESS_KEY=xxx \
-R2_BUCKET=gallery-images npm run manifest
+R2_BUCKET=<your-bucket> npm run manifest
 ```
 
-### 5. 构建与部署
+### 5. Build & deploy
+
+**Git integration (recommended)**: push to GitHub, connect the repo in Dashboard → Workers & Pages → Create → **Pages** → Connect to Git. Build command `npm run build`, build output directory `dist`. With `pages_build_output_dir` declared in `wrangler.toml`, the R2 binding is applied automatically on every build.
+
+After that, every `git push` deploys automatically.
+
+**Direct upload** (no Git integration):
 
 ```bash
 npm run deploy   # vite build + wrangler pages deploy dist
 ```
 
-本地开发：
+Local development:
+
 ```bash
-npm run dev          # 纯前端，Vite dev server
-npm run pages:dev    # 全栈（含 Functions），需先 wrangler login
+npm run dev         # frontend only, Vite dev server
+npm run pages:dev   # full stack (with Functions), requires wrangler login
 ```
 
-Git 集成部署：构建命令 `npm run build`，输出目录 `dist`。
+## Notes
 
-## 说明
+- `/cdn-cgi/image/` requires the site to be served from a **custom domain**; it may not work on `*.pages.dev` preview domains. Set `USE_TRANSFORMATIONS = false` in `src/config.js` in that case.
+- Enable Image Transformations once per zone: Dashboard → **Images → Transformations** → Enable for your zone. Free tier: 5,000 unique transformations/month; exceeding quota returns error 9422 (the frontend falls back to originals).
+- Pages secrets only take effect on deployments created **after** the secret was set. After changing `UPLOAD_TOKEN`, trigger a new deployment and clear the old token from the browser (`localStorage.removeItem('gallery_upload_token')`).
 
-- `/cdn-cgi/image/` 需要站点走**自定义域名**；`*.pages.dev` 预览域名下可能不生效，此时把 `src/config.js` 里 `USE_TRANSFORMATIONS` 设为 `false`
-- Transformations 免费版每月 5000 次 unique transformation，超量新变换报 9422（前端已内置回退原图）
-- 大文件直传、EXIF、私有画廊等进阶话题见原版 README
+## Troubleshooting
 
-## 目录结构
+| Symptom | Cause / Fix |
+|---|---|
+| Build error `Missing entry-point to Worker script` | `wrangler.toml` lacks `pages_build_output_dir` — declare it, and make sure the project is a **Pages** project, not a Worker |
+| `R2 bucket '...' not found` at publish | `bucket_name` in `wrangler.toml` doesn't match an existing bucket |
+| `No build command specified. Skipping build step.` | Set build command `npm run build` in Pages → Settings → Build |
+| Upload returns `UPLOAD_TOKEN 未设置` despite being set | Secret was set after the current deployment, or set on Preview instead of Production — re-set for Production and redeploy |
+| Upload returns `未授权` in the admin page but curl works | Browser localStorage holds a stale token — clear and re-enter it on `#/admin` |
+| Thumbnails 404 | Transformations not enabled for the zone, or site accessed via `*.pages.dev` — use the custom domain and enable the zone in Images → Transformations |
+
+## Directory structure
 
 ```
 flarefolio/
-├── wrangler.toml
+├── README.md                # English (default)
+├── README.zh-CN.md          # 简体中文
+├── wrangler.toml            # R2 binding + pages_build_output_dir
 ├── vite.config.js
 ├── index.html
 ├── src/
 │   ├── main.js
-│   ├── config.js            # 改这里：IMG_BASE 等
-│   ├── App.vue              # 顶栏 + hash 路由
-│   ├── lib/gallery.js       # 图片 URL / 清单加载
+│   ├── config.js            # IMG_BASE etc.
+│   ├── App.vue              # Top bar + hash routing
+│   ├── lib/gallery.js       # Image URLs / manifest loading
 │   ├── assets/styles.css
 │   └── components/
-│       ├── GalleryView.vue  # 网格 + 搜索 + 灯箱
+│       ├── GalleryView.vue  # Grid + search + lightbox
 │       ├── Lightbox.vue
-│       └── AdminView.vue    # 上传页
-├── public/images.json       # 静态清单（方案 B）
-├── functions/api/           # images.js / upload.js（同原版）
+│       └── AdminView.vue    # Upload page
+├── public/images.json       # Static manifest (Option B)
+├── functions/api/           # images.js / upload.js
 └── scripts/gen-manifest.mjs
 ```
