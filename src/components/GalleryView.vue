@@ -23,6 +23,50 @@ onMounted(() => {
 });
 onUnmounted(() => mediaQuery?.removeEventListener('change', onMediaChange));
 
+// 管理员会话探测（Access 登录后画廊直接显示管理按钮）
+const isAdmin = ref(false);
+const busyId = ref('');
+async function probeAdmin() {
+  try {
+    const r = await fetch('/api/admin/whoami', { cache: 'no-store' });
+    const ct = r.headers.get('content-type') || '';
+    // 未登录 → Access 302 到登录页（HTML）；已登录 → 本接口 JSON
+    isAdmin.value = ct.includes('application/json') && r.ok;
+  } catch { /* 非管理员 */ }
+}
+
+async function rotateArtwork(it, quarter) {
+  if (busyId.value) return;
+  busyId.value = it.id;
+  try {
+    const r = await fetch(`/api/admin/artworks/${it.id}/rotate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quarter })
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || r.status);
+    items.value = await loadArtworks();
+  } catch (e) {
+    alert(`旋转失败：${e.message}`);
+  }
+  busyId.value = '';
+}
+
+async function deleteArtwork(it) {
+  if (busyId.value || !confirm(`删除「${it.title}」？图片会同时从存储移除。`)) return;
+  busyId.value = it.id;
+  try {
+    const r = await fetch(`/api/admin/artworks/${it.id}`, { method: 'DELETE' });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || r.status);
+    items.value = items.value.filter((x) => x.id !== it.id);
+  } catch (e) {
+    alert(`删除失败：${e.message}`);
+  }
+  busyId.value = '';
+}
+
 const allTags = computed(() => {
   const counts = new Map();
   for (const it of items.value) {
@@ -46,6 +90,7 @@ const lbImgs = computed(() => filtered.value.map((it) => ({
 
 onMounted(async () => {
   items.value = await loadArtworks();
+  probeAdmin();
   // /art/:slug 深链接：滚动到该作品并打开灯箱
   const m = location.pathname.match(/^\/art\/(.+?)\/?$/);
   if (m) {
@@ -115,9 +160,10 @@ function onImgError(e, key) {
     <!-- 瀑布流（aspect-ratio 占位防闪烁；手机 2 列） -->
     <MasonryWall :items="filtered" :column-width="columnWidth" :gap="12" :padding="0" :ssr-columns="1">
       <template #default="{ item, index }">
-        <button
+        <div
           class="group relative mb-3 block w-full cursor-zoom-in overflow-hidden rounded-xl border border-gray-200 bg-gradient-to-br from-gray-100 to-gray-200"
           :style="{ aspectRatio: ratioOf(item) }"
+          :class="{ 'opacity-50': busyId === item.id }"
           @click="openLightbox(index)"
         >
           <img
@@ -137,7 +183,28 @@ function onImgError(e, key) {
               {{ item.medium }}<span v-if="item.tags?.length"> · {{ item.tags.join(' / ') }}</span>
             </p>
           </div>
-        </button>
+          <!-- 管理按钮（仅管理员会话可见）：旋转 / 删除 -->
+          <div v-if="isAdmin" class="absolute right-2 top-2 flex gap-1.5">
+            <button
+              class="flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-sm text-white backdrop-blur transition-colors hover:bg-black/70"
+              :disabled="busyId === item.id"
+              title="逆时针旋转 90°"
+              @click.stop="rotateArtwork(item, 3)"
+            >⟲</button>
+            <button
+              class="flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-sm text-white backdrop-blur transition-colors hover:bg-black/70"
+              :disabled="busyId === item.id"
+              title="顺时针旋转 90°"
+              @click.stop="rotateArtwork(item, 1)"
+            >⟳</button>
+            <button
+              class="flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-sm text-white backdrop-blur transition-colors hover:bg-red-600"
+              :disabled="busyId === item.id"
+              title="删除"
+              @click.stop="deleteArtwork(item)"
+            >✕</button>
+          </div>
+        </div>
       </template>
     </MasonryWall>
 

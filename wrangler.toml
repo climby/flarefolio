@@ -24,3 +24,5 @@ database_id = "6391a8bc-1f51-47d2-824b-ef0fed2b276c"
 [vars]
 CF_ACCESS_TEAM = "mdengfeng"
 CF_ACCESS_AUD = "4b306dda359b4ca27cbada67b5d5b1726700053ab104b9e739b03006dcd7c264"
+# R2 公开域名（服务端旋转功能取原图用）
+R2_IMG_BASE = "https://s3img01.5201688.xyz"
