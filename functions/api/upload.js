@@ -58,5 +58,7 @@ export async function onRequestPost({ request, env }) {
     }
   });
 
-  return Response.json({ ok: true, key, size: file.size }, { status: 201 });
+  // 默认标题：文件名去扩展名，前端表单可修改
+  const title = String(file.name).replace(/\.[^.]+$/, '').slice(0, 200) || '未命名画作';
+  return Response.json({ ok: true, key, size: file.size, title }, { status: 201 });
 }

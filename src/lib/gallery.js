@@ -15,8 +15,8 @@ export function fileName(key) {
   return String(key).split('/').pop();
 }
 
-/** 先尝试 /api/images，失败回退到静态 images.json */
-export async function loadImages() {
+/** 旧数据源：/api/images 或静态 images.json（仅回退用） */
+async function loadImages() {
   for (const u of [config.API_URL, config.MANIFEST_URL]) {
     try {
       const r = await fetch(u, { cache: 'no-store' });
@@ -31,4 +31,39 @@ export async function loadImages() {
     }
   }
   return [];
+}
+
+/**
+ * P1 主数据源：GET /api/artworks（D1，含标题/材质/心得/标签）。
+ * 失败时回退到旧图片清单（映射成最小元数据结构），保证画廊不空。
+ */
+export async function loadArtworks() {
+  try {
+    const r = await fetch(config.ARTWORKS_URL, { cache: 'no-store' });
+    if (r.ok) {
+      const data = await r.json();
+      if (Array.isArray(data.artworks)) return data.artworks;
+    }
+  } catch {
+    /* 回退到旧清单 */
+  }
+  return (await loadImages()).map((it) => ({
+    image_key: it.key,
+    title: fileName(it.key).replace(/\.[^.]+$/, ''),
+    medium: null,
+    notes: null,
+    tags: []
+  }));
+}
+
+/** 宽高比缺省 4:3（瀑布流占位防闪烁） */
+export function ratioOf(it) {
+  return it.aspect_ratio || 4 / 3;
+}
+
+/** 搜索匹配：标题 + 材质 + 标签 */
+export function matches(it, q) {
+  if (!q) return true;
+  const hay = [it.title, it.medium, ...(it.tags || [])].join(' ').toLowerCase();
+  return hay.includes(q);
 }

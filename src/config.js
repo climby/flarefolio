@@ -7,6 +7,9 @@ export const config = {
   API_URL: '/api/images',
   MANIFEST_URL: '/images.json',
 
+  // P1 数据源：D1 元数据 API
+  ARTWORKS_URL: '/api/artworks',
+
   // 是否启用 Cloudflare Image Transformations（需要站点走自定义域名；*.pages.dev 预览域名下可能不生效）
   USE_TRANSFORMATIONS: true,
 

@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted } from 'vue';
-import { imgUrl, fileName } from '../lib/gallery.js';
+import { imgUrl } from '../lib/gallery.js';
 import { config } from '../config.js';
 
 const props = defineProps({
@@ -32,10 +32,10 @@ onUnmounted(() => {
     <button class="lb-close" aria-label="关闭" @click="$emit('close')">✕</button>
     <button class="lb-prev" aria-label="上一张" @click.stop="$emit('nav', -1)">‹</button>
     <img
-      :src="imgUrl(current.key, config.LIGHTBOX_WIDTH, 85)"
-      :alt="fileName(current.key)"
+      :src="imgUrl(current.image_key, config.LIGHTBOX_WIDTH, 85)"
+      :alt="current.title"
     >
     <button class="lb-next" aria-label="下一张" @click.stop="$emit('nav', 1)">›</button>
-    <div class="lb-caption">{{ fileName(current.key) }}</div>
+    <div class="lb-caption">{{ current.title }}</div>
   </div>
 </template>

@@ -13,3 +13,9 @@ bucket_name = "img01"
 # 上传鉴权 token 请用 secret 设置，不要写在这里：
 #   npx wrangler pages secret put UPLOAD_TOKEN
 # 也可以在 Pages Dashboard → Settings → Functions → Environment variables 里设置
+
+# D1：画作元数据（标题/材质/心得/标签），Functions 里通过 env.DB 访问
+[[d1_databases]]
+binding = "DB"
+database_name = "gallery-db"
+database_id = "TODO_DATABASE_ID"
