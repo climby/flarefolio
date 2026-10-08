@@ -3,7 +3,7 @@
  * 入参 multipart/form-data：file 字段。
  * 注意：超大文件建议改用 R2 presigned URL 直传（见 README）。
  */
-const MAX_BYTES = 10 * 1024 * 1024; // 单文件 10MB，可按需调整
+const MAX_BYTES = 50 * 1024 * 1024; // 单文件 50MB（Workers 免费版请求体上限 100MB）
 
 function safeName(name) {
   return name
@@ -33,7 +33,7 @@ export async function onRequestPost({ request, env }) {
   }
   if (file.size > MAX_BYTES) {
     return Response.json(
-      { error: `文件过大（${(file.size / 1048576).toFixed(1)}MB），上限 10MB` },
+      { error: `文件过大（${(file.size / 1048576).toFixed(1)}MB），上限 50MB` },
       { status: 413 }
     );
   }

@@ -1,7 +1,9 @@
 <script setup>
 import { ref } from 'vue';
+import { stripPrivateMetadata } from '../lib/exif.js';
 
 const file = ref(null);           // 当前待上传文件（单张，逐张填元数据）
+const exifMode = ref('');         // lossless / baked / passthrough
 const title = ref('');
 const medium = ref('');
 const notes = ref('');
@@ -13,18 +15,32 @@ const dragOver = ref(false);
 const fileInput = ref(null);
 
 const MEDIUMS = ['', '水彩', '丙烯', '速写', '板绘', '素描', '摄影'];
+const EXIF_LABELS = {
+  lossless: '已剥离隐私数据（无损，像素未动）',
+  baked: '已剥离隐私数据（方向已校正重编码）',
+  passthrough: '（非 JPEG，未处理）'
+};
 
 function push(html, cls) {
   log.value.unshift({ html, cls });
 }
 
-function setFile(f) {
+async function setFile(f) {
   if (!f) return;
-  file.value = f;
-  title.value = f.name.replace(/\.[^.]+$/, '').slice(0, 200) || '未命名画作';
+  // 先剥离隐私数据（GPS/相机信息），文件不出设备
+  let cleaned;
+  try {
+    cleaned = await stripPrivateMetadata(f);
+  } catch (e) {
+    push(`⚠ EXIF 剥离失败（${e.message}），改用原图上传`, 'err');
+    cleaned = { file: f, mode: 'passthrough' };
+  }
+  file.value = cleaned.file;
+  exifMode.value = cleaned.mode;
+  title.value = cleaned.file.name.replace(/\.[^.]+$/, '').slice(0, 200) || '未命名画作';
   aspectRatio.value = null;
   // 本地读宽高（不经过网络），瀑布流占位用
-  const url = URL.createObjectURL(f);
+  const url = URL.createObjectURL(cleaned.file);
   const img = new Image();
   img.onload = () => {
     aspectRatio.value = img.naturalWidth / img.naturalHeight || null;
@@ -36,6 +52,7 @@ function setFile(f) {
 
 function resetForm() {
   file.value = null;
+  exifMode.value = '';
   title.value = '';
   medium.value = '';
   notes.value = '';
@@ -107,6 +124,9 @@ async function upload() {
         <span class="ml-2 text-xs text-gray-400">
           {{ (file.size / 1048576).toFixed(1) }}MB{{ aspectRatio ? ` · ${aspectRatio.toFixed(2)}:1` : '' }}
         </span>
+      </p>
+      <p class="mt-0.5 text-xs text-green-600">
+        {{ EXIF_LABELS[exifMode] || '' }}
       </p>
       <div class="mt-3 grid gap-3">
         <div>

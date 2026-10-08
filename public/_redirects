@@ -1,0 +1,2 @@
+# SPA 回退：非静态资源路径交给前端路由（/admin、/art/:slug 等）
+/* /index.html 200
