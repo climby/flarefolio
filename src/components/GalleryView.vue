@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import VueEasyLightbox from 'vue-easy-lightbox';
 import { MasonryWall } from '@yeger/vue-masonry-wall';
 import { loadArtworks, imgUrl, srcset, ratioOf, matches } from '../lib/gallery.js';
+import { adminState } from '../lib/admin.js';
 import { config } from '../config.js';
 
 const items = ref([]);
@@ -23,17 +24,8 @@ onMounted(() => {
 });
 onUnmounted(() => mediaQuery?.removeEventListener('change', onMediaChange));
 
-// 管理员会话探测（Access 登录后画廊直接显示管理按钮）
-const isAdmin = ref(false);
+// 管理操作（编辑模式下可用；状态由 App 顶栏的 ✎ 开关控制）
 const busyId = ref('');
-async function probeAdmin() {
-  try {
-    const r = await fetch('/api/admin/whoami', { cache: 'no-store' });
-    const ct = r.headers.get('content-type') || '';
-    // 未登录 → Access 302 到登录页（HTML）；已登录 → 本接口 JSON
-    isAdmin.value = ct.includes('application/json') && r.ok;
-  } catch { /* 非管理员 */ }
-}
 
 async function rotateArtwork(it, quarter) {
   if (busyId.value) return;
@@ -90,7 +82,6 @@ const lbImgs = computed(() => filtered.value.map((it) => ({
 
 onMounted(async () => {
   items.value = await loadArtworks();
-  probeAdmin();
   // /art/:slug 深链接：滚动到该作品并打开灯箱
   const m = location.pathname.match(/^\/art\/(.+?)\/?$/);
   if (m) {
@@ -161,10 +152,12 @@ function onImgError(e, key) {
     <MasonryWall :items="filtered" :column-width="columnWidth" :gap="12" :padding="0" :ssr-columns="1">
       <template #default="{ item, index }">
         <div
-          class="group relative mb-3 block w-full cursor-zoom-in overflow-hidden rounded-xl border border-gray-200 bg-gradient-to-br from-gray-100 to-gray-200"
+          class="group relative mb-3 block w-full overflow-hidden rounded-xl border bg-gradient-to-br from-gray-100 to-gray-200"
+          :class="adminState.editMode.value
+            ? 'border-blue-300 ring-2 ring-blue-200'
+            : 'cursor-zoom-in border-gray-200'"
           :style="{ aspectRatio: ratioOf(item) }"
-          :class="{ 'opacity-50': busyId === item.id }"
-          @click="openLightbox(index)"
+          @click="!adminState.editMode.value && openLightbox(index)"
         >
           <img
             :src="imgUrl(item.image_key, config.THUMB_WIDTHS[0])"
@@ -183,8 +176,8 @@ function onImgError(e, key) {
               {{ item.medium }}<span v-if="item.tags?.length"> · {{ item.tags.join(' / ') }}</span>
             </p>
           </div>
-          <!-- 管理按钮（仅管理员会话可见）：旋转 / 删除 -->
-          <div v-if="isAdmin" class="absolute right-2 top-2 flex gap-1.5">
+          <!-- 管理按钮（仅编辑模式）：旋转 / 删除 -->
+          <div v-if="adminState.editMode.value" class="absolute right-2 top-2 flex gap-1.5">
             <button
               class="flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-sm text-white backdrop-blur transition-colors hover:bg-black/70"
               :disabled="busyId === item.id"
