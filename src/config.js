@@ -1,7 +1,7 @@
 /* 画廊站点配置：按你的实际情况修改 */
 export const config = {
   // R2 public bucket 绑定的自定义域名（原图直链用）
-  IMG_BASE: 'https://img.example.com',
+  IMG_BASE: 'https://s3img01.5201688.xyz',
 
   // 图片清单来源：优先走动态 API，失败自动回退到静态 images.json
   API_URL: '/api/images',

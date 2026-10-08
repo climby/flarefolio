@@ -8,7 +8,7 @@ pages_build_output_dir = "dist"
 # R2 绑定：存放原图的 bucket（Functions 里通过 env.IMAGES 访问）
 [[r2_buckets]]
 binding = "IMAGES"
-bucket_name = "gallery-images"
+bucket_name = "img01"
 
 # 上传鉴权 token 请用 secret 设置，不要写在这里：
 #   npx wrangler pages secret put UPLOAD_TOKEN
