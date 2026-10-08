@@ -1,6 +1,10 @@
 name = "flarefolio"
 compatibility_date = "2025-06-01"
 
+# 声明 Pages 输出目录：Git 集成构建时 wrangler 由此识别这是 Pages 项目，
+# 并读取下方 bindings（R2 等），无需在 Dashboard 手动绑定
+pages_build_output_dir = "dist"
+
 # R2 绑定：存放原图的 bucket（Functions 里通过 env.IMAGES 访问）
 [[r2_buckets]]
 binding = "IMAGES"
