@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import VueEasyLightbox from 'vue-easy-lightbox';
 import { MasonryWall } from '@yeger/vue-masonry-wall';
 import { loadArtworks, imgUrl, srcset, ratioOf, matches } from '../lib/gallery.js';
@@ -11,6 +11,17 @@ const activeTag = ref('');        // '' = 全部
 const lbVisible = ref(false);
 const lbIndex = ref(0);
 const initialSlug = ref('');     // /art/:slug 深链接进入时自动开灯箱
+
+// 响应式列宽：手机 2 列，桌面按 280px 自动分列
+const isMobile = ref(window.matchMedia('(max-width: 640px)').matches);
+let mediaQuery;
+function onMediaChange(e) { isMobile.value = e.matches; }
+const columnWidth = computed(() => (isMobile.value ? 170 : 280));
+onMounted(() => {
+  mediaQuery = window.matchMedia('(max-width: 640px)');
+  mediaQuery.addEventListener('change', onMediaChange);
+});
+onUnmounted(() => mediaQuery?.removeEventListener('change', onMediaChange));
 
 const allTags = computed(() => {
   const counts = new Map();
@@ -101,11 +112,11 @@ function onImgError(e, key) {
       >{{ tag }} <span class="opacity-60">{{ n }}</span></button>
     </div>
 
-    <!-- 瀑布流（aspect-ratio 占位防闪烁） -->
-    <MasonryWall :items="filtered" :column-width="280" :gap="16" :padding="0" :ssr-columns="1">
+    <!-- 瀑布流（aspect-ratio 占位防闪烁；手机 2 列） -->
+    <MasonryWall :items="filtered" :column-width="columnWidth" :gap="12" :padding="0" :ssr-columns="1">
       <template #default="{ item, index }">
         <button
-          class="group relative mb-4 block w-full cursor-zoom-in overflow-hidden rounded-xl border border-gray-200 bg-gradient-to-br from-gray-100 to-gray-200"
+          class="group relative mb-3 block w-full cursor-zoom-in overflow-hidden rounded-xl border border-gray-200 bg-gradient-to-br from-gray-100 to-gray-200"
           :style="{ aspectRatio: ratioOf(item) }"
           @click="openLightbox(index)"
         >
@@ -134,12 +145,11 @@ function onImgError(e, key) {
       还没有画作。先去 <a href="/admin" class="text-blue-600 hover:underline">上传</a> 几张吧。
     </div>
 
-    <!-- 手势灯箱：双指缩放 / 双击放大 / 旋转 / 键盘翻页 -->
+    <!-- 手势灯箱：双指缩放 / 拖动 / 双击放大 / 旋转 / 键盘翻页 -->
     <VueEasyLightbox
       :visible="lbVisible"
       :imgs="lbImgs"
       :index="lbIndex"
-      move-disabled
       @hide="lbVisible = false"
     />
   </main>
