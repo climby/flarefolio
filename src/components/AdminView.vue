@@ -1,7 +1,6 @@
 <script setup>
 import { ref } from 'vue';
 
-const token = ref(localStorage.getItem('gallery_upload_token') || '');
 const file = ref(null);           // 当前待上传文件（单张，逐张填元数据）
 const title = ref('');
 const medium = ref('');
@@ -14,10 +13,6 @@ const dragOver = ref(false);
 const fileInput = ref(null);
 
 const MEDIUMS = ['', '水彩', '丙烯', '速写', '板绘', '素描', '摄影'];
-
-function saveToken() {
-  localStorage.setItem('gallery_upload_token', token.value.trim());
-}
 
 function push(html, cls) {
   log.value.unshift({ html, cls });
@@ -49,15 +44,13 @@ function resetForm() {
 }
 
 async function upload() {
-  if (!token.value.trim()) return push('请先填写 upload token', 'err');
   if (!file.value) return push('请先选择图片', 'err');
   uploading.value = true;
-  const auth = { Authorization: `Bearer ${token.value.trim()}` };
   try {
-    // 第 1 步：文件 → R2
+    // 第 1 步：文件 → R2（鉴权由 Cloudflare Access 会话 cookie 自动携带）
     const fd = new FormData();
     fd.append('file', file.value, file.value.name);
-    const up = await fetch('/api/admin/upload', { method: 'POST', headers: auth, body: fd });
+    const up = await fetch('/api/admin/upload', { method: 'POST', body: fd });
     const upData = await up.json().catch(() => ({}));
     if (!up.ok) throw new Error(`上传失败：${upData.error || up.status}`);
     push(`✓ 已存储 → ${upData.key}`, 'ok');
@@ -73,7 +66,7 @@ async function upload() {
     };
     const metaRes = await fetch('/api/admin/artworks', {
       method: 'POST',
-      headers: { ...auth, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(meta)
     });
     const metaData = await metaRes.json().catch(() => ({}));
@@ -91,20 +84,8 @@ async function upload() {
   <div class="mx-auto max-w-2xl px-6 py-10">
     <h1 class="text-2xl font-bold text-gray-900">上传画作</h1>
     <p class="mt-1 text-sm text-gray-400">
-      鉴权：Cloudflare Access（邮箱验证码）优先；未配置 Access 时使用 UPLOAD_TOKEN，token 只保存在本浏览器 localStorage。
+      已由 Cloudflare Access 保护（邮箱验证码登录），无需密码或 token。
     </p>
-
-    <div class="mt-5">
-      <label class="mb-1.5 block text-[13px] text-gray-400">Upload token</label>
-      <input
-        v-model="token"
-        type="password"
-        placeholder="Bearer token"
-        autocomplete="off"
-        class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm outline-none transition-colors focus:border-blue-600"
-        @change="saveToken"
-      >
-    </div>
 
     <!-- 拖拽/选择图片（单张：每张单独填元数据） -->
     <div
