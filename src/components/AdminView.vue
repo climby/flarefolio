@@ -57,7 +57,7 @@ async function upload() {
     // 第 1 步：文件 → R2
     const fd = new FormData();
     fd.append('file', file.value, file.value.name);
-    const up = await fetch('/api/upload', { method: 'POST', headers: auth, body: fd });
+    const up = await fetch('/api/admin/upload', { method: 'POST', headers: auth, body: fd });
     const upData = await up.json().catch(() => ({}));
     if (!up.ok) throw new Error(`上传失败：${upData.error || up.status}`);
     push(`✓ 已存储 → ${upData.key}`, 'ok');
@@ -91,7 +91,7 @@ async function upload() {
   <div class="mx-auto max-w-2xl px-6 py-10">
     <h1 class="text-2xl font-bold text-gray-900">上传画作</h1>
     <p class="mt-1 text-sm text-gray-400">
-      需要 UPLOAD_TOKEN（P2 将换为 Cloudflare Access 免密登录）。token 只保存在本浏览器 localStorage。
+      鉴权：Cloudflare Access（邮箱验证码）优先；未配置 Access 时使用 UPLOAD_TOKEN，token 只保存在本浏览器 localStorage。
     </p>
 
     <div class="mt-5">

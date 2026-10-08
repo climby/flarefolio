@@ -1,7 +1,6 @@
 /**
- * POST /api/upload — 鉴权后把图片写入 R2。
- * 鉴权：请求头 Authorization: Bearer <UPLOAD_TOKEN>
- *   UPLOAD_TOKEN 通过 `npx wrangler pages secret put UPLOAD_TOKEN` 设置。
+ * POST /api/admin/upload — 鉴权后把图片写入 R2（P2：从 /api/upload 迁入，由 admin 中间件统一鉴权）。
+ * 入参 multipart/form-data：file 字段。
  * 注意：超大文件建议改用 R2 presigned URL 直传（见 README）。
  */
 const MAX_BYTES = 10 * 1024 * 1024; // 单文件 10MB，可按需调整
@@ -17,13 +16,6 @@ function safeName(name) {
 export async function onRequestPost({ request, env }) {
   if (!env.IMAGES) {
     return Response.json({ error: 'R2 binding "IMAGES" 未配置' }, { status: 500 });
-  }
-  if (!env.UPLOAD_TOKEN) {
-    return Response.json({ error: 'UPLOAD_TOKEN 未设置' }, { status: 500 });
-  }
-  const auth = request.headers.get('Authorization') || '';
-  if (auth !== `Bearer ${env.UPLOAD_TOKEN}`) {
-    return Response.json({ error: '未授权' }, { status: 401 });
   }
 
   let form;
