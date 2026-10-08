@@ -5,3 +5,21 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
     "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
 }
+
+/*
+ * vue-easy-lightbox 工具栏避让（移动端）：
+ * 浏览器底部前进/后退/地址栏会完全遮挡默认 bottom:8px 的工具栏，
+ * 手机上整体抬高（含 PWA 刘海屏 safe-area），桌面不变。
+ * 用 .vel-modal 前缀提高优先级，覆盖组件运行时注入的样式。
+ */
+.vel-modal .vel-toolbar {
+  bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+}
+@media (max-width: 750px) {
+  .vel-modal .vel-toolbar {
+    bottom: calc(52px + env(safe-area-inset-bottom, 0px));
+  }
+  .vel-modal .vel-img-title {
+    bottom: calc(104px + env(safe-area-inset-bottom, 0px));
+  }
+}
