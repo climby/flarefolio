@@ -27,9 +27,11 @@ function push(html, cls) {
 }
 
 /** 更新预览与宽高比 */
+const previewError = ref('');
 function refreshMeta() {
   if (previewUrl.value) URL.revokeObjectURL(previewUrl.value);
   previewUrl.value = file.value ? URL.createObjectURL(file.value) : '';
+  previewError.value = '';
   aspectRatio.value = null;
   if (!file.value) return;
   const img = new Image();
@@ -37,6 +39,18 @@ function refreshMeta() {
     aspectRatio.value = img.naturalWidth / img.naturalHeight || null;
   };
   img.src = previewUrl.value;
+}
+
+/** 预览渲染失败时显示诊断信息（文件类型/大小/魔数），便于定位相机直拍问题 */
+async function onPreviewError() {
+  if (!file.value) return;
+  const f = file.value;
+  let diag = `类型=${f.type || '(空)'}，${(f.size / 1048576).toFixed(1)}MB`;
+  try {
+    const head = new Uint8Array(await f.slice(0, 8).arrayBuffer());
+    diag += '，文件头=' + [...head].map((x) => x.toString(16).padStart(2, '0')).join(' ');
+  } catch { /* 忽略 */ }
+  previewError.value = `预览不可用（${diag}）。若是 HEIC 请在相机设置改为“兼容性/高效 → 兼容”后重拍。`;
 }
 
 /** 手动旋转 90°（顺时针 quarterTurns 次；1 正转、3 逆转） */
@@ -155,7 +169,9 @@ async function upload() {
           :src="previewUrl"
           alt="预览"
           class="max-h-56 rounded-lg border border-gray-200 bg-gray-50 object-contain"
+          @error="onPreviewError"
         >
+        <p v-if="previewError" class="max-w-[60%] self-center text-xs leading-5 text-red-600">{{ previewError }}</p>
         <div class="flex gap-2">
           <button
             type="button"

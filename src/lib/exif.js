@@ -108,12 +108,39 @@ async function bakeAndStrip(file, orientation) {
   }
 }
 
+/** 嗅探文件头魔数（相机直拍的文件可能没有扩展名、type 为空或不准确） */
+async function sniffKind(file) {
+  const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const hex = (i) => head[i].toString(16).padStart(2, '0');
+  const ascii = (i) => String.fromCharCode(head[i] || 0);
+  if (head[0] === 0xff && head[1] === 0xd8) return 'jpeg';
+  if (head[0] === 0x89 && hex(1) === '50' && ascii(2) === 'N' && ascii(3) === 'G') return 'png';
+  if (ascii(0) === 'R' && ascii(1) === 'I' && ascii(2) === 'F' && ascii(3) === 'F') return 'webp';
+  if (ascii(0) === 'G' && ascii(1) === 'I' && ascii(2) === 'F') return 'gif';
+  if (ascii(4) === 'f' && ascii(5) === 't' && ascii(6) === 'y' && ascii(7) === 'p') {
+    const brand = ascii(8) + ascii(9) + ascii(10) + ascii(11);
+    if (/hei[cf]|mif1|msf1|hevx/i.test(brand)) return 'heic';
+    return 'mp4-ish';
+  }
+  return 'unknown';
+}
+
 /**
  * 入口：处理待上传文件，返回 { file, mode }
- *   mode: 'lossless'（原像素未动）| 'baked'（方向已烘焙重编码）| 'passthrough'（非 JPEG）
+ *   mode: 'lossless'（原像素未动）| 'baked'（方向烘焙/格式转换重编码）| 'passthrough'（原样保留）
  */
 export async function stripPrivateMetadata(file) {
-  if (file.type !== 'image/jpeg' && !/\.jpe?g$/i.test(file.name)) {
+  const kind = await sniffKind(file);
+  const looksJpeg = kind === 'jpeg' || file.type === 'image/jpeg' || /\.jpe?g$/i.test(file.name);
+  if (!looksJpeg) {
+    if (kind === 'heic' || file.type === 'image/heic' || /\.hei[cf]$/i.test(file.name)) {
+      // HEIC：能解码的浏览器（iOS Safari）转成 JPEG；不能解码的会抛错，回落原样并让上层提示
+      try {
+        return { file: await rotateQuarter(file, 0, true), mode: 'baked' };
+      } catch {
+        return { file, mode: 'passthrough' };
+      }
+    }
     return { file, mode: 'passthrough' };
   }
   const buf = await file.arrayBuffer();
@@ -133,8 +160,8 @@ export async function stripPrivateMetadata(file) {
 
 /**
  * 手动旋转 90°（用于源头就没有 orientation 信息的照片，如某些第三方相机 App）。
- * quarterTurns：顺时针 90° 的次数（1 或 3=逆时针 90°）。
- * 返回旋转后的 JPEG File。
+ * quarterTurns：顺时针 90° 的次数（1=顺时针 90°，3=逆时针 90°，0=仅转码为 JPEG）。
+ * 返回旋转后的 JPEG File（asRawName=true 时保留原文件名结构）。
  */
 export async function rotateQuarter(file, quarterTurns = 1) {
   const url = URL.createObjectURL(file);
@@ -146,7 +173,6 @@ export async function rotateQuarter(file, quarterTurns = 1) {
       i.src = url;
     });
     const n = ((quarterTurns % 4) + 4) % 4;
-    if (n === 0) return file;
     const swap = n % 2 === 1;
     const w = swap ? img.naturalHeight : img.naturalWidth;
     const h = swap ? img.naturalWidth : img.naturalHeight;
@@ -155,10 +181,11 @@ export async function rotateQuarter(file, quarterTurns = 1) {
     canvas.height = h;
     const ctx = canvas.getContext('2d');
     ctx.translate(w / 2, h / 2);
-    ctx.rotate(n * 0.5 * Math.PI);
+    if (n) ctx.rotate(n * 0.5 * Math.PI);
     ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
     const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.92));
-    return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+    if (!blob) throw new Error('canvas 编码失败');
+    return new File([blob], (file.name.replace(/\.[^.]+$/, '') || 'photo') + '.jpg', { type: 'image/jpeg' });
   } finally {
     URL.revokeObjectURL(url);
   }
